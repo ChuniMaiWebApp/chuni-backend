@@ -144,6 +144,14 @@ export function readRatingFromImages(_text: string, images: string[]): number {
 export interface LinkedGateProgress {
   gate: LinkedGate;
   status: LinkedGateStatus;
+  /**
+   * The game's own badge art for this gate in this state.
+   *
+   * Nothing drawn here would be as recognisable to a player as the hexagon
+   * already on the cabinet, so the page shows SEGA's image rather than an
+   * interpretation of it.
+   */
+  badgeUrl: string | null;
   /** Set only when the badge image is not in any lookup table. */
   unrecognisedBadge?: string;
 }
@@ -173,6 +181,10 @@ export function parseLinkedVerse(html: string): LinkedGateProgress[] {
         // Never fall back to NOT_FOUND. An unrecognised badge is a gap in our
         // table, not a statement about the player's progress.
         status: status ?? LinkedGateStatus.UNKNOWN,
+        // The game's own badge art for this gate in this state. Nothing we
+        // could draw would be as recognisable to a player as the hexagon they
+        // already see on the cabinet.
+        badgeUrl: source ? source.replace(/([^:])\/\//g, '$1/') : null,
         ...(status === undefined ? { unrecognisedBadge: filename } : {}),
       });
     },
