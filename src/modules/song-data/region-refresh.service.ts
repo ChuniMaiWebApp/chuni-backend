@@ -43,14 +43,35 @@ const WORLDS_END_ID_FLOOR = 8000;
  */
 const MIN_PLAUSIBLE_MATCHES = 1_000;
 
+interface UpstreamNoteCounts {
+  tap?: number | null;
+  hold?: number | null;
+  slide?: number | null;
+  air?: number | null;
+  flick?: number | null;
+  total?: number | null;
+}
+
 interface UpstreamSheet {
   difficulty: string;
+  level: string;
+  levelValue?: number;
+  internalLevel?: string;
+  internalLevelValue?: number;
+  noteDesigner?: string;
+  noteCounts?: UpstreamNoteCounts;
   regions: { jp: boolean; intl: boolean };
 }
 
 interface UpstreamSong {
+  songId?: string;
   title: string;
+  artist?: string;
   category: string;
+  bpm?: number;
+  imageName?: string;
+  version?: string;
+  releaseDate?: string;
   sheets: UpstreamSheet[];
 }
 
@@ -116,16 +137,18 @@ export class RegionRefreshService {
     const updates: Array<[number, string, boolean, boolean]> = [];
     const unmatched: Array<{ id: number; title: string; removed: boolean }> =
       [];
+    const matchedUpstreamKeys = new Set<string>();
 
     for (const song of songs) {
-      const match = upstream.get(
-        songKey(song.title, song.id >= WORLDS_END_ID_FLOOR),
-      );
+      const key = songKey(song.title, song.id >= WORLDS_END_ID_FLOOR);
+      const match = upstream.get(key);
 
       if (!match) {
         unmatched.push(song);
         continue;
       }
+
+      matchedUpstreamKeys.add(key);
 
       for (const sheet of match.sheets) {
         // WORLD'S END sheets carry the kanji as their difficulty name, so
@@ -145,6 +168,13 @@ export class RegionRefreshService {
       }
     }
 
+    const missingUpstream: UpstreamSong[] = [];
+    for (const [key, song] of upstream.entries()) {
+      if (!matchedUpstreamKeys.has(key)) {
+        missingUpstream.push(song);
+      }
+    }
+
     const matchedSongs = songs.length - unmatched.length;
 
     if (matchedSongs < MIN_PLAUSIBLE_MATCHES) {
@@ -156,6 +186,124 @@ export class RegionRefreshService {
     }
 
     await this.db.transaction(async (client) => {
+      // Clean up duplicate synthetic songs if an official seed song now shares the exact same title
+      await client.query(`
+        delete from app.songs s1
+         where s1.id >= 90000
+           and exists (
+             select 1 from app.songs s2
+              where s2.id < 90000
+                and s2.title = s1.title
+           )
+      `);
+
+      // Synthesize missing songs from arcade-songs (zetaraku)
+      if (missingUpstream.length > 0) {
+        const maxIds = await client.query<{
+          max_std: number | null;
+          max_we: number | null;
+        }>(`
+          select max(case when id < 8000 then id end) as max_std,
+                 max(case when id >= 8000 and id < 90000 then id end) as max_we
+            from app.songs
+        `);
+
+        let nextStdId = Math.max(90000, (maxIds.rows[0]?.max_std ?? 3000) + 1);
+        let nextWeId = Math.max(98000, (maxIds.rows[0]?.max_we ?? 8300) + 1);
+
+        for (const missing of missingUpstream) {
+          const isWe = missing.category === WORLDS_END_CATEGORY;
+          const newId = isWe ? nextWeId++ : nextStdId++;
+
+          await client.query(
+            `insert into app.songs (
+               id, title, artist, genre, version, release_date, bpm, min_bpm, max_bpm,
+               jacket, available, removed, is_hidden_on_chuninet
+             ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, false, false)
+             on conflict (id) do update set
+               title = excluded.title,
+               artist = excluded.artist,
+               genre = excluded.genre,
+               version = excluded.version,
+               release_date = excluded.release_date,
+               bpm = excluded.bpm,
+               min_bpm = excluded.min_bpm,
+               max_bpm = excluded.max_bpm,
+               jacket = excluded.jacket`,
+            [
+              newId,
+              missing.title,
+              missing.artist || 'Unknown',
+              missing.category,
+              missing.version || 'UNKNOWN',
+              missing.releaseDate || null,
+              missing.bpm || null,
+              missing.bpm || null,
+              missing.bpm || null,
+              missing.imageName || null,
+            ],
+          );
+
+          for (const sheet of missing.sheets) {
+            const difficulty =
+              DIFFICULTY[sheet.difficulty] ?? (isWe ? 'WE' : null);
+
+            if (!difficulty) continue;
+
+            const chartConst =
+              sheet.internalLevelValue ?? sheet.levelValue ?? null;
+            const noteDesigner =
+              sheet.noteDesigner && sheet.noteDesigner !== '-'
+                ? sheet.noteDesigner
+                : null;
+
+            await client.query(
+              `insert into app.charts (
+                 song_id, difficulty, level, const, max_combo,
+                 tap, hold, slide, air, flick, charter, version, available,
+                 available_intl, available_jp
+               ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13, $14)
+               on conflict (song_id, difficulty) do update set
+                 level = excluded.level,
+                 const = excluded.const,
+                 max_combo = excluded.max_combo,
+                 tap = excluded.tap,
+                 hold = excluded.hold,
+                 slide = excluded.slide,
+                 air = excluded.air,
+                 flick = excluded.flick,
+                 charter = excluded.charter,
+                 version = excluded.version,
+                 available_intl = excluded.available_intl,
+                 available_jp = excluded.available_jp`,
+              [
+                newId,
+                difficulty,
+                sheet.level,
+                chartConst,
+                sheet.noteCounts?.total ?? null,
+                sheet.noteCounts?.tap ?? null,
+                sheet.noteCounts?.hold ?? null,
+                sheet.noteCounts?.slide ?? null,
+                sheet.noteCounts?.air ?? null,
+                sheet.noteCounts?.flick ?? null,
+                noteDesigner,
+                missing.version || null,
+                sheet.regions.intl,
+                sheet.regions.jp,
+              ],
+            );
+
+            updates.push([
+              newId,
+              difficulty,
+              sheet.regions.intl,
+              sheet.regions.jp,
+            ]);
+          }
+        }
+      }
+
       // A refresh replaces the whole picture, so stale rows must not survive
       // as a leftover `true` on a chart the upstream no longer lists.
       await client.query(

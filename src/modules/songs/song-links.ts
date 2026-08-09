@@ -40,9 +40,21 @@ export function sdvxinUrl(
  * broken images on exactly those pages.
  */
 const JACKET_HOST = 'https://new.chunithm-net.com/chuni-mobile/html/mobile/img';
+const ZETARAKU_JACKET_HOST =
+  'https://dp4p6x0xfi5o9.cloudfront.net/chunithm/img/cover';
 
 export function jacketUrl(jacket: string | null): string | null {
-  return jacket ? `${JACKET_HOST}/${jacket}` : null;
+  if (!jacket) return null;
+  if (jacket.startsWith('http://') || jacket.startsWith('https://')) {
+    return jacket;
+  }
+
+  // Zetaraku (arcade-songs) uses sha256 png hashes (e.g. 41d47015...png).
+  if (jacket.endsWith('.png') || jacket.length > 30) {
+    return `${ZETARAKU_JACKET_HOST}/${jacket}`;
+  }
+
+  return `${JACKET_HOST}/${jacket}`;
 }
 
 /** There is no official video, so link a search rather than guess a video id. */
