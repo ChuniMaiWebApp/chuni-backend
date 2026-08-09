@@ -131,12 +131,14 @@ export class RegionRefreshService {
     const songs = await this.db.query<{
       id: number;
       title: string;
+      version: string;
       removed: boolean;
-    }>('select id, title, removed from app.songs');
+    }>('select id, title, version, removed from app.songs');
 
     const updates: Array<[number, string, boolean, boolean]> = [];
     const unmatched: Array<{ id: number; title: string; removed: boolean }> =
       [];
+    const songVersionUpdates: [number, string][] = [];
     const matchedUpstreamKeys = new Set<string>();
 
     for (const song of songs) {
@@ -149,6 +151,10 @@ export class RegionRefreshService {
       }
 
       matchedUpstreamKeys.add(key);
+
+      if (match.version && match.version !== song.version) {
+        songVersionUpdates.push([song.id, match.version]);
+      }
 
       for (const sheet of match.sheets) {
         // WORLD'S END sheets carry the kanji as their difficulty name, so
@@ -316,6 +322,13 @@ export class RegionRefreshService {
               set available_intl = $3, available_jp = $4
             where song_id = $1 and difficulty = $2`,
           [songId, difficulty, intl, jp],
+        );
+      }
+
+      for (const [songId, newVersion] of songVersionUpdates) {
+        await client.query(
+          `update app.songs set version = $2 where id = $1`,
+          [songId, newVersion],
         );
       }
 

@@ -169,20 +169,61 @@ export class SongsService {
   }
 
   async search(query: string, limit: number, availableOnly: boolean) {
-    const trimmed = query.trim();
+    const res = await this.searchWithOptions({
+      query,
+      limit,
+      region: availableOnly ? 'intl' : 'all',
+    });
+    return res.songs;
+  }
 
-    if (trimmed.length === 0) {
-      throw new BadRequestException('Search query cannot be empty.');
+  async searchWithOptions(options: import('./songs.repository').SongSearchOptions) {
+    const { rows, total } = await this.repository.searchWithOptions(options);
+
+    const page = Math.max(options.page || 1, 1);
+    const limit = Math.min(Math.max(options.limit || 30, 1), 500);
+    const totalPages = Math.ceil(total / limit);
+
+    if (rows.length === 0) {
+      return {
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+        songs: [],
+      };
     }
 
-    const rows = await this.repository.search(trimmed, limit, availableOnly);
+    const songIds = rows.map((row) => row.id);
+    const chartRows = await this.repository.findChartsBySongIds(songIds);
 
-    return rows.map((row) => ({
-      ...this.toSongView(row),
-      // Surfacing the alias that matched explains why a result is in the list.
-      matchedAlias: row.matched_alias,
-      score: Number(row.score),
-    }));
+    const chartsBySongId = new Map<number, ChartRow[]>();
+
+    for (const chart of chartRows) {
+      const list = chartsBySongId.get(chart.song_id) ?? [];
+
+      list.push(chart);
+      chartsBySongId.set(chart.song_id, list);
+    }
+
+    const songs = rows.map((row) => {
+      const songCharts = chartsBySongId.get(row.id) ?? [];
+
+      return {
+        ...this.toSongView(row),
+        matchedAlias: row.matched_alias,
+        score: Number(row.score),
+        charts: songCharts.map((chart) => this.toChartView(chart, row.title)),
+      };
+    });
+
+    return {
+      total,
+      page,
+      limit,
+      totalPages,
+      songs,
+    };
   }
 
   async findById(id: number): Promise<SongView> {

@@ -79,6 +79,31 @@ export interface CourseTrackRow {
   chart_const: string | null;
 }
 
+export interface SongSearchOptions {
+  query?: string;
+  genre?: string;
+  version?: string;
+  difficulty?: string;
+  region?: 'all' | 'intl' | 'jp';
+  minConst?: number;
+  maxConst?: number;
+  minBpm?: number;
+  maxBpm?: number;
+  charter?: string;
+  hideRemoved?: boolean;
+  sortBy?: 'default' | 'title' | 'const' | 'release' | 'bpm';
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+export interface SearchRow extends SongRow {
+  matched_alias: string | null;
+  score: number;
+  max_const: number | null;
+  total_count?: string | number;
+}
+
 @Injectable()
 export class SongsRepository {
   constructor(private readonly db: DatabaseService) {}
@@ -90,36 +115,116 @@ export class SongsRepository {
    * Japanese, English and symbols, and players type approximate romanisations
    * that no dictionary-based stemmer would resolve.
    */
-  search(query: string, limit: number, availableOnly: boolean) {
-    return this.db.query<SearchRow>(
-      `with matches as (
-         select s.*, s.release_date::text as release_date,
-                greatest(
-                  similarity(lower(s.title), $1),
-                  similarity(lower(s.artist), $1) * 0.8,
-                  coalesce(max(similarity(lower(a.alias), $1)), 0)
-                ) as score,
-                (array_agg(a.alias order by similarity(lower(a.alias), $1) desc)
-                   filter (where lower(a.alias) % $1))[1] as matched_alias
+  async search(query: string, limit: number, availableOnly: boolean) {
+    const res = await this.searchWithOptions({
+      query,
+      limit,
+      region: availableOnly ? 'intl' : 'all',
+    });
+    return res.rows;
+  }
+
+  /**
+   * Advanced multi-field search and filter with pagination.
+   */
+  async searchWithOptions(options: SongSearchOptions) {
+    const q = (options.query ?? '').trim().toLowerCase();
+    const genre = options.genre || null;
+    const version = options.version || null;
+    const difficulty = options.difficulty || null;
+    const region = options.region || 'all';
+    const minConst = options.minConst ?? null;
+    const maxConst = options.maxConst ?? null;
+    const minBpm = options.minBpm ?? null;
+    const maxBpm = options.maxBpm ?? null;
+    const charter = options.charter
+      ? `%${options.charter.trim().toLowerCase()}%`
+      : null;
+    const hideRemoved = options.hideRemoved ?? false;
+    const sortBy = options.sortBy || 'default';
+    const sortOrder =
+      options.sortOrder || (sortBy === 'title' ? 'asc' : 'desc');
+
+    const page = Math.max(options.page ?? 1, 1);
+    const limit = Math.min(Math.max(options.limit ?? 30, 1), 500);
+    const offset = (page - 1) * limit;
+
+    const rows = await this.db.query<SearchRow>(
+      `with matched_songs as (
+         select s.id, s.title, s.artist, s.genre, s.version, s.release_date::text as release_date,
+                s.bpm, s.min_bpm, s.max_bpm, s.jacket, s.duration_ms, s.available, s.removed,
+                s.available_intl, s.available_jp, s.is_hidden_on_chuninet,
+                max(c.const) as max_const,
+                count(*) over() as total_count,
+                case
+                  when $1 = '' then 1.0
+                  else greatest(
+                    similarity(lower(s.title), $1),
+                    similarity(lower(s.artist), $1) * 0.8,
+                    coalesce(max(case when $1 != '' then similarity(lower(a.alias), $1) else 0 end), 0)
+                  )
+                end as score,
+                case
+                  when $1 = '' then null
+                  else (array_agg(a.alias order by similarity(lower(a.alias), $1) desc)
+                          filter (where lower(a.alias) % $1))[1]
+                end as matched_alias
            from app.songs s
            left join app.song_aliases a on a.song_id = s.id
-          where (lower(s.title) % $1
+           left join app.charts c on c.song_id = s.id
+          where ($1 = ''
+                 or lower(s.title) % $1
                  or lower(s.artist) % $1
                  or lower(a.alias) % $1
-                 -- Substring match rescues very short queries, where trigram
-                 -- similarity against a long title is always below threshold.
                  or lower(s.title) like '%' || $1 || '%')
-            -- available_intl is the regional dataset's answer, not the seeded
-            -- flag, which was wrong in both directions. "is not false" rather
-            -- than "= true": a song we have no regional entry for is unknown,
-            -- and hiding the unknown is the bug this replaced.
-            and ($3 = false
-                 or (s.removed = false and s.available_intl is not false))
+            and ($2::text is null or s.genre = $2)
+            and ($3::text is null or s.version = $3)
+            and ($4::text = 'all'
+                 or ($4 = 'intl' and s.available_intl is not false)
+                 or ($4 = 'jp' and s.available_jp is not false))
+            and ($5::numeric is null or s.max_bpm >= $5)
+            and ($6::numeric is null or s.min_bpm <= $6)
+            and ($7::text is null or c.difficulty = $7)
+            and ($8::numeric is null or c.const >= $8)
+            and ($9::numeric is null or c.const <= $9)
+            and ($10::text is null or lower(c.charter) like $10)
+            and ($11::boolean is not true or s.removed is not true)
           group by s.id
        )
-       select * from matches order by score desc, title asc limit $2`,
-      [query.toLowerCase(), limit, availableOnly],
+       select * from matched_songs
+       order by
+         case when $12 = 'const' and $13 = 'asc' then max_const end asc nulls last,
+         case when $12 = 'const' and $13 = 'desc' then max_const end desc nulls last,
+         case when $12 = 'title' and $13 = 'asc' then lower(title) end asc,
+         case when $12 = 'title' and $13 = 'desc' then lower(title) end desc,
+         case when $12 = 'release' and $13 = 'asc' then release_date end asc nulls last,
+         case when $12 = 'release' and $13 = 'desc' then release_date end desc nulls last,
+         case when $12 = 'bpm' and $13 = 'asc' then bpm end asc nulls last,
+         case when $12 = 'bpm' and $13 = 'desc' then bpm end desc nulls last,
+         case when $12 = 'default' or $12 is null then score end desc,
+         title asc
+       offset $14 limit $15`,
+      [
+        q,
+        genre,
+        version,
+        region,
+        minBpm,
+        maxBpm,
+        difficulty,
+        minConst,
+        maxConst,
+        charter,
+        hideRemoved,
+        sortBy,
+        sortOrder,
+        offset,
+        limit,
+      ],
     );
+
+    const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+    return { rows, total };
   }
 
   findSongById(id: number) {
@@ -137,6 +242,19 @@ export class SongsRepository {
                    when 'BAS' then 0 when 'ADV' then 1 when 'EXP' then 2
                    when 'MAS' then 3 when 'ULT' then 4 else 5 end`,
       [id],
+    );
+  }
+
+  findChartsBySongIds(ids: number[]) {
+    if (ids.length === 0) return Promise.resolve([]);
+
+    return this.db.query<ChartRow>(
+      `select * from app.charts
+        where song_id = any($1)
+        order by song_id, case difficulty
+                   when 'BAS' then 0 when 'ADV' then 1 when 'EXP' then 2
+                   when 'MAS' then 3 when 'ULT' then 4 else 5 end`,
+      [ids],
     );
   }
 

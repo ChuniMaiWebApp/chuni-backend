@@ -22,25 +22,51 @@ export class SongsController {
 
   @Get('songs/search')
   @ApiOperation({
-    summary: 'Fuzzy search songs by title, artist or alias',
-    description:
-      'Tolerant of typos and romanisations — "tentai kansoku" finds 天体観測.',
-  })
-  @ApiQuery({ name: 'q', description: 'Search text' })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({
-    name: 'available',
-    required: false,
-    type: Boolean,
-    description: 'Restrict to songs playable on CHUNITHM International.',
+    summary: 'Search and filter songs by title, artist, genre, version, difficulty, constant, bpm, and region',
   })
   search(
-    @Query('q') query: string,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('available', new DefaultValuePipe(false), ParseBoolPipe)
-    available: boolean,
+    @Query('q') query?: string,
+    @Query('genre') genre?: string,
+    @Query('version') version?: string,
+    @Query('difficulty') difficulty?: string,
+    @Query('region') region?: 'all' | 'intl' | 'jp',
+    @Query('minConst') minConst?: string,
+    @Query('maxConst') maxConst?: string,
+    @Query('minBpm') minBpm?: string,
+    @Query('maxBpm') maxBpm?: string,
+    @Query('charter') charter?: string,
+    @Query('hideRemoved') hideRemoved?: string,
+    @Query('sortBy') sortBy?: 'default' | 'title' | 'const' | 'release' | 'bpm',
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(30), ParseIntPipe) limit?: number,
+    @Query('available') available?: string,
   ) {
-    return this.songs.search(query, Math.min(limit, 50), available);
+    const parseNum = (val?: string) =>
+      val !== undefined && val !== '' && !isNaN(Number(val))
+        ? Number(val)
+        : undefined;
+
+    const resolvedRegion =
+      region || (available === 'true' ? 'intl' : 'all');
+
+    return this.songs.searchWithOptions({
+      query: query || '',
+      genre,
+      version,
+      difficulty,
+      region: resolvedRegion,
+      minConst: parseNum(minConst),
+      maxConst: parseNum(maxConst),
+      minBpm: parseNum(minBpm),
+      maxBpm: parseNum(maxBpm),
+      charter,
+      hideRemoved: hideRemoved === 'true',
+      sortBy,
+      sortOrder,
+      page: Math.max(page || 1, 1),
+      limit: Math.min(Math.max(limit || 30, 1), 500),
+    });
   }
 
   @Get('songs/random')
