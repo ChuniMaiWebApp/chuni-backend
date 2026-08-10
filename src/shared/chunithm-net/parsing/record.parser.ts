@@ -2,6 +2,7 @@ import { load, type Cheerio, type CheerioAPI } from 'cheerio';
 import type { Element } from 'domhandler';
 
 import {
+  Difficulty,
   Rank,
   rankFromScore,
   type Judgements,
@@ -217,6 +218,9 @@ export function parseMusicList(html: string): PersonalBest[] {
     const score = chuniInt(scoreElement.text());
     const songId = form.find('input[name=idx]').first().attr('value');
 
+    const playCountText = form.find('.musicdata_score_title:contains("Play Count"), .musicdata_score_title:contains("プレー回数")').next('.musicdata_score_num').text();
+    const playCount = playCountText ? chuniInt(playCountText) : null;
+
     records.push({
       song: {
         id: songId ? chuniInt(songId) : null,
@@ -238,7 +242,79 @@ export function parseMusicList(html: string): PersonalBest[] {
       comboLamp: lamps.comboLamp,
       chainLamp: lamps.chainLamp,
       achievedAt: null,
-      playCount: null,
+      playCount,
+      ajcCount: null,
+      ...baseScore(),
+    });
+  });
+
+  return records;
+}
+
+/**
+ * Parses `POST /mobile/record/musicGenre/sendMusicDetail/` - the detail page for one song.
+ * Returns the PersonalBest for each played difficulty on that song with exact Play Count.
+ */
+export function parseMusicRecordDetail(html: string): PersonalBest[] {
+  const $ = load(html);
+  const records: PersonalBest[] = [];
+
+  const title = $('.play_musicdata_title').first().text().trim();
+  const jacketSrc = $('.play_jacket_area img').first().attr('src') ?? null;
+  const songIdRaw = $('form input[name=idx]').first().attr('value');
+  const songId = songIdRaw ? chuniInt(songIdRaw) : null;
+
+  $('.music_box').each((_, element) => {
+    const box = $(element);
+
+    const diffTitle = box.find('.musicdata_detail_difficulty').text().trim().toLowerCase();
+    let difficulty: Difficulty = Difficulty.MASTER;
+    if (diffTitle.includes('basic')) difficulty = Difficulty.BASIC;
+    else if (diffTitle.includes('advanced')) difficulty = Difficulty.ADVANCED;
+    else if (diffTitle.includes('expert')) difficulty = Difficulty.EXPERT;
+    else if (diffTitle.includes('master')) difficulty = Difficulty.MASTER;
+    else if (diffTitle.includes('ultima')) difficulty = Difficulty.ULTIMA;
+
+    // High Score line
+    const scoreText = box.find('.block_underline').first().find('.musicdata_score_num .text_b').text();
+    if (!scoreText) return; // Unplayed difficulty
+
+    const score = chuniInt(scoreText);
+
+    // Play Count line
+    let playCount: number | null = null;
+    box.find('.block_underline').each((__, line) => {
+      const lineText = $(line).text();
+      if (lineText.includes('Play Count') || lineText.includes('プレー回数')) {
+        const val = $(line).find('.musicdata_score_num').text();
+        if (val) playCount = chuniInt(val);
+      }
+    });
+
+    const iconBlock = box.find('.play_musicdata_icon').first();
+    const lamps = iconBlock.length
+      ? getRankAndLamps($, iconBlock)
+      : { ...UNKNOWN_LAMPS };
+
+    records.push({
+      song: {
+        id: songId,
+        title,
+        jacketUrl: jacketSrc,
+      },
+      chart: {
+        difficulty,
+        level: null,
+        internalLevel: null,
+        maxCombo: null,
+      },
+      score,
+      rank: lamps.rank === Rank.D ? rankFromScore(score) : lamps.rank,
+      clearLamp: lamps.clearLamp,
+      comboLamp: lamps.comboLamp,
+      chainLamp: lamps.chainLamp,
+      achievedAt: null,
+      playCount,
       ajcCount: null,
       ...baseScore(),
     });

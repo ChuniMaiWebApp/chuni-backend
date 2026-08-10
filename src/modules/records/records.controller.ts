@@ -94,7 +94,7 @@ export class RecordsController {
       version,
       sort,
       order,
-      limit: Math.min(limit ?? 100, 500),
+      limit: Math.min(limit ?? 100, 5000),
     });
   }
 

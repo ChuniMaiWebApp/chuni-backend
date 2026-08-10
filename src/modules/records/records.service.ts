@@ -52,6 +52,7 @@ export interface StoredScoreView {
   } | null;
   maxCombo: number | null;
   achievedAt: string | null;
+  playCount: number | null;
   rating: number | null;
   overpower: number | null;
   maxOverpower: number | null;
@@ -131,6 +132,7 @@ export class RecordsService {
         : null,
       maxCombo: row.max_combo,
       achievedAt: row.achieved_at ? row.achieved_at.toISOString() : null,
+      playCount: row.play_count ? Math.max(row.play_count, 1) : 1,
       rating:
         chartConst === null ? null : calculateRating(row.score, chartConst),
       // Without a lamp the bonus is unknown, so OP would be understated.
@@ -253,6 +255,7 @@ export class RecordsService {
     const rows = await this.repository.findScores(
       userId,
       RecordsService.parseFilter(input),
+      10_000,
     );
     const scores = rows.map((row) => this.toView(row));
 
@@ -296,16 +299,24 @@ export class RecordsService {
 
   /** Every stored score on one song. */
   async scoresForSong(userId: string, songId: number) {
-    const rows = await this.repository.findScores(userId, {}, 10_000);
-    const forSong = rows.filter((row) => row.song_id === songId);
-
-    if (forSong.length === 0) {
-      throw new NotFoundException(
-        'No scores stored for that song. Run a sync first.',
-      );
+    if (userId) {
+      try {
+        const liveScores = await this.auth.withChunithmSession(userId, (session) =>
+          session.getMusicRecordDetail(songId),
+        );
+        if (liveScores && liveScores.length > 0) {
+          await this.repository.upsertScores(userId, liveScores);
+        }
+      } catch (err) {
+        this.logger.debug(
+          `Could not refresh live music record for song ${songId}: ${(err as Error).message}`,
+        );
+      }
     }
 
-    return forSong
+    const rows = await this.repository.findScores(userId, { songId });
+
+    return rows
       .map((row) => this.toView(row))
       .sort((a, b) => a.chart.difficulty - b.chart.difficulty);
   }

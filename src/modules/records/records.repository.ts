@@ -17,6 +17,7 @@ export interface StoredScoreRow {
   miss: number | null;
   max_combo: number | null;
   achieved_at: Date | null;
+  play_count: number | null;
   title: string;
   jacket: string | null;
   genre: string;
@@ -39,6 +40,7 @@ export interface ChartTotalsRow {
 }
 
 export interface ScoreFilter {
+  songId?: number;
   level?: string;
   minConst?: number;
   maxConst?: number;
@@ -107,11 +109,12 @@ export class RecordsRepository {
       score.judgements?.miss ?? null,
       score.maxCombo,
       score.achievedAt,
+      score.playCount ?? null,
     ]);
 
     if (rows.length === 0) return { stored: 0, skipped };
 
-    const COLUMNS = 13;
+    const COLUMNS = 14;
     const BATCH = 400;
 
     for (let index = 0; index < rows.length; index += BATCH) {
@@ -130,13 +133,14 @@ export class RecordsRepository {
         `insert into app.personal_bests (
            user_id, song_id, difficulty, score,
            clear_lamp, combo_lamp, chain_lamp,
-           justice_critical, justice, attack, miss, max_combo, achieved_at
+           justice_critical, justice, attack, miss, max_combo, achieved_at, play_count
          ) values ${values}
          on conflict (user_id, song_id, difficulty) do update set
            score      = greatest(app.personal_bests.score, excluded.score),
            clear_lamp = greatest(app.personal_bests.clear_lamp, excluded.clear_lamp),
            combo_lamp = greatest(app.personal_bests.combo_lamp, excluded.combo_lamp),
            chain_lamp = greatest(app.personal_bests.chain_lamp, excluded.chain_lamp),
+           play_count = greatest(coalesce(app.personal_bests.play_count, 0), coalesce(excluded.play_count, 0)),
            -- Judgements describe one specific run, so they only travel with a
            -- score that actually beats what is stored.
            justice_critical = case when excluded.score > app.personal_bests.score
@@ -169,6 +173,7 @@ export class RecordsRepository {
               p.clear_lamp, p.combo_lamp, p.chain_lamp,
               p.justice_critical, p.justice, p.attack, p.miss, p.max_combo,
               p.achieved_at,
+              coalesce(p.play_count, (select count(*)::int from app.play_details d where d.user_id = p.user_id and d.song_id = p.song_id and d.difficulty = p.difficulty), 1) as play_count,
               s.title, s.jacket, s.genre, s.version,
               c.level, c.const::text as chart_const,
               c.max_combo as chart_max_combo
@@ -183,6 +188,7 @@ export class RecordsRepository {
           and ($5::text is null or p.difficulty = $5)
           and ($6::text is null or s.genre = $6)
           and ($7::text is null or s.version = $7)
+          and ($9::integer is null or p.song_id = $9)
         limit $8`,
       [
         userId,
@@ -193,6 +199,7 @@ export class RecordsRepository {
         filter.genre ?? null,
         filter.version ?? null,
         limit,
+        filter.songId ?? null,
       ],
     );
   }

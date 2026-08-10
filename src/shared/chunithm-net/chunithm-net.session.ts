@@ -33,6 +33,7 @@ import {
 import { chuniInt } from './parsing/utils';
 import {
   parseMusicList,
+  parseMusicRecordDetail,
   parsePlaylog,
   parsePlaylogDetail,
 } from './parsing/record.parser';
@@ -434,6 +435,17 @@ export class ChunithmNetSession {
     return parseMusicList(
       await this.request('POST', `mobile/record/musicGenre/${endpoint}`, {
         genre: '99', // all genres
+      }),
+    );
+  }
+
+  /**
+   * High scores and exact Play Count for all difficulties of a specific song.
+   */
+  async getMusicRecordDetail(songId: number): Promise<PersonalBest[]> {
+    return parseMusicRecordDetail(
+      await this.request('POST', 'mobile/record/musicGenre/sendMusicDetail/', {
+        idx: String(songId),
       }),
     );
   }
