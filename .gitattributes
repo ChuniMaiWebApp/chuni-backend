@@ -1,0 +1,19 @@
+# Windows checkouts turn LF into CRLF, and several kinds of file here are read
+# by Linux, where the stray \r is not whitespace:
+#
+#   *.sh   — the shebang becomes `/usr/bin/env bash\r` and the VPS answers
+#            "bad interpreter: no such file or directory"
+#   *.conf — nginx folds the \r into the token and rejects the directive
+#   .env*  — `POSTGRES_PASSWORD=secret\r` makes the \r part of the password,
+#            which then does not match the one in DATABASE_URL
+#
+# So these stay LF wherever they are checked out.
+*.sh          text eol=lf
+*.conf        text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.sql         text eol=lf
+.env          text eol=lf
+.env.*        text eol=lf
+*.example     text eol=lf
+Dockerfile    text eol=lf

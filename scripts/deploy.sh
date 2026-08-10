@@ -127,9 +127,13 @@ PREVIOUS_SHA=$(git rev-parse HEAD)
 log "Current commit: $PREVIOUS_SHA"
 
 log "Fetching latest code"
+# Whatever branch the checkout is on. Hardcoding `main` breaks silently on a
+# repo whose default is still `master`: the fetch succeeds, the reset fails,
+# and `set -e` aborts the deploy with a message about an unknown revision.
+BRANCH="${DEPLOY_BRANCH:-$(git symbolic-ref --short HEAD)}"
 git fetch --prune origin
-git reset --hard origin/main
-log "Deploying commit: $(git rev-parse HEAD)"
+git reset --hard "origin/$BRANCH"
+log "Deploying commit: $(git rev-parse HEAD) on $BRANCH"
 
 build_and_reload
 

@@ -2,7 +2,9 @@ name: CI/CD — chuni-backend
 
 on:
   push:
-    branches: [main]
+    # Both, because the repos were first pushed to `master`. Renaming later
+    # needs no change here.
+    branches: [main, master]
   workflow_dispatch:
 
 # Two pushes in quick succession would otherwise race on the VPS: both would
@@ -61,8 +63,9 @@ jobs:
             cd /home/repo/ChuniMaiWebApp/chuni-backend
             # Pull the script itself first: everything else the deploy does is
             # defined by the version of deploy.sh in the commit being deployed.
+            export DEPLOY_BRANCH="${{ github.ref_name }}"
             git fetch --prune origin
-            git checkout origin/main -- scripts/deploy.sh
+            git checkout "origin/${{ github.ref_name }}" -- scripts/deploy.sh
             chmod +x scripts/deploy.sh
             ./scripts/deploy.sh
 
