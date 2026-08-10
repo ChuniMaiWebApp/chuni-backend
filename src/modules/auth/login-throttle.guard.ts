@@ -19,8 +19,8 @@ const WINDOW_SECONDS = 15 * 60;
 // Still low enough to matter. A password-spraying run needs thousands of
 // attempts, not twenty — and the point of these numbers is to make the app
 // useless as a proxy for that, not to catch a player fumbling their password.
-const MAX_ATTEMPTS_PER_IP = 20;
-const MAX_ATTEMPTS_PER_ACCOUNT = 10;
+const MAX_ATTEMPTS_PER_IP = 25;
+const MAX_ATTEMPTS_PER_ACCOUNT = 20;
 
 /**
  * Rate limits sign-in attempts.
