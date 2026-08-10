@@ -8,10 +8,15 @@ import { Environment } from './env.validation';
  */
 export interface AppConfig {
   env: Environment;
+  host: string;
   port: number;
   apiPrefix: string;
   corsOrigin: string[] | string;
+  /** Cookie `Domain` attribute, or undefined for a host-only cookie. */
+  cookieDomain?: string;
   swaggerEnabled: boolean;
+  /** Number of reverse proxy hops Express should trust. 0 disables it. */
+  trustProxy: number;
   database: {
     connectionString: string;
   };
@@ -22,6 +27,8 @@ export interface AppConfig {
     jwtExpiresIn: string;
   };
   supabase: {
+    /** False when the deployment runs plain Postgres instead of Supabase. */
+    configured: boolean;
     url: string;
     anonKey: string;
     serviceRoleKey: string;
@@ -55,12 +62,15 @@ const parseCorsOrigin = (raw: string): string[] | string => {
 
 export const configuration = (): AppConfig => ({
   env: (process.env.NODE_ENV as Environment) ?? Environment.Development,
+  host: process.env.HOST ?? '0.0.0.0',
   port: Number(process.env.PORT ?? 3333),
   apiPrefix: process.env.API_PREFIX ?? 'api',
   corsOrigin: parseCorsOrigin(
     process.env.CORS_ORIGIN ?? 'http://localhost:3100',
   ),
+  cookieDomain: process.env.COOKIE_DOMAIN || undefined,
   swaggerEnabled: process.env.SWAGGER_ENABLED !== 'false',
+  trustProxy: Number(process.env.TRUST_PROXY ?? 0),
   database: {
     connectionString: process.env.DATABASE_URL ?? '',
   },
@@ -70,6 +80,9 @@ export const configuration = (): AppConfig => ({
     jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '30d',
   },
   supabase: {
+    configured: Boolean(
+      process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY,
+    ),
     url: process.env.SUPABASE_URL ?? '',
     anonKey: process.env.SUPABASE_ANON_KEY ?? '',
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',

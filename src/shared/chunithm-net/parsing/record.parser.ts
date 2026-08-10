@@ -218,7 +218,12 @@ export function parseMusicList(html: string): PersonalBest[] {
     const score = chuniInt(scoreElement.text());
     const songId = form.find('input[name=idx]').first().attr('value');
 
-    const playCountText = form.find('.musicdata_score_title:contains("Play Count"), .musicdata_score_title:contains("プレー回数")').next('.musicdata_score_num').text();
+    const playCountText = form
+      .find(
+        '.musicdata_score_title:contains("Play Count"), .musicdata_score_title:contains("プレー回数")',
+      )
+      .next('.musicdata_score_num')
+      .text();
     const playCount = playCountText ? chuniInt(playCountText) : null;
 
     records.push({
@@ -267,7 +272,11 @@ export function parseMusicRecordDetail(html: string): PersonalBest[] {
   $('.music_box').each((_, element) => {
     const box = $(element);
 
-    const diffTitle = box.find('.musicdata_detail_difficulty').text().trim().toLowerCase();
+    const diffTitle = box
+      .find('.musicdata_detail_difficulty')
+      .text()
+      .trim()
+      .toLowerCase();
     let difficulty: Difficulty = Difficulty.MASTER;
     if (diffTitle.includes('basic')) difficulty = Difficulty.BASIC;
     else if (diffTitle.includes('advanced')) difficulty = Difficulty.ADVANCED;
@@ -276,7 +285,11 @@ export function parseMusicRecordDetail(html: string): PersonalBest[] {
     else if (diffTitle.includes('ultima')) difficulty = Difficulty.ULTIMA;
 
     // High Score line
-    const scoreText = box.find('.block_underline').first().find('.musicdata_score_num .text_b').text();
+    const scoreText = box
+      .find('.block_underline')
+      .first()
+      .find('.musicdata_score_num .text_b')
+      .text();
     if (!scoreText) return; // Unplayed difficulty
 
     const score = chuniInt(scoreText);

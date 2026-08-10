@@ -1,0 +1,94 @@
+name: CI/CD — chuni-backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Two pushes in quick succession would otherwise race on the VPS: both would
+# `git reset --hard origin/main`, both would build into the same directory, and
+# PM2 would reload whichever finished last. Queue them instead —
+# `cancel-in-progress: false` because cancelling mid-deploy is worse than waiting.
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # `lint`, not `lint:ci`, would be `eslint --fix` — a CI job that repairs
+      # its own findings on the runner and then reports success.
+      - name: Lint
+        run: npm run lint:ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    name: Deploy to VPS
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Run the deploy script over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 15m
+          script: |
+            set -e
+            cd /home/repo/ChuniMaiWebApp/chuni-backend
+            # Pull the script itself first: everything else the deploy does is
+            # defined by the version of deploy.sh in the commit being deployed.
+            git fetch --prune origin
+            git checkout origin/main -- scripts/deploy.sh
+            chmod +x scripts/deploy.sh
+            ./scripts/deploy.sh
+
+  notify:
+    name: Telegram
+    needs: [ci, deploy]
+    runs-on: ubuntu-latest
+    # `always()` matters: when `ci` fails, `deploy` is *skipped* rather than
+    # failed, so a notify step living inside `deploy` with `if: failure()`
+    # never runs — nothing would be sent for the most common kind of failure.
+    if: always()
+
+    steps:
+      - uses: appleboy/telegram-action@v1.0.1
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          format: markdown
+          disable_web_page_preview: true
+          message: |
+            ${{ needs.deploy.result == 'success' && '🚀 *API DEPLOY THÀNH CÔNG*' || (needs.ci.result != 'success' && '🧪 *API — CI THẤT BẠI, chưa deploy*' || '❌ *API DEPLOY THẤT BẠI*') }}
+            ────────────────────
+            *Repo:* `chuni-backend`
+            *Author:* ${{ github.actor }}
+            *Commit:* [`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            *Message:* ${{ github.event.head_commit.message || 'manual run' }}
+            ────────────────────
+            *CI:* ${{ needs.ci.result }} · *Deploy:* ${{ needs.deploy.result }}
+            ${{ needs.deploy.result == 'success' && '✅ https://chunithm-api.novaseele.com/api/v1/health' || format('🔎 Log: https://github.com/{0}/actions/runs/{1}', github.repository, github.run_id) }}

@@ -52,11 +52,27 @@ export class AuthController {
 
     response.cookie(SESSION_COOKIE, token, {
       httpOnly: true,
+      // `lax`, not `none`: the app and the API are different origins in
+      // production but the same *site*, and SameSite is defined on the site.
+      // `none` would additionally let any third-party page carry the cookie.
       sameSite: 'lax',
       secure: isProduction,
       maxAge: 30 * 24 * 60 * 60 * 1000,
       path: '/',
+      ...this.cookieScope(),
     });
+  }
+
+  /**
+   * Shared between setting and clearing: a cookie is only removed by a
+   * `Set-Cookie` whose domain and path match the one that created it. Clearing
+   * without the domain would leave the session cookie in place and make
+   * signing out appear to do nothing.
+   */
+  private cookieScope(): { domain?: string } {
+    const domain = this.config.get('cookieDomain', { infer: true });
+
+    return domain ? { domain } : {};
   }
 
   @Post('login')
@@ -165,6 +181,6 @@ export class AuthController {
   ): Promise<void> {
     await this.authService.unlink(userId, body.invalidateRemote ?? false);
 
-    response.clearCookie(SESSION_COOKIE, { path: '/' });
+    response.clearCookie(SESSION_COOKIE, { path: '/', ...this.cookieScope() });
   }
 }

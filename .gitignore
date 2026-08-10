@@ -48,3 +48,13 @@ pids
 *.pid
 *.seed
 *.pid.lock
+
+# TLS material — the Cloudflare Origin key must never reach the repository
+*.pem
+*.key
+
+# Production compose secrets (lives in chunimai-database, guarded here too)
+.env.prod
+
+# Incremental build stamp — a build artifact, not source
+tsconfig.build.tsbuildinfo

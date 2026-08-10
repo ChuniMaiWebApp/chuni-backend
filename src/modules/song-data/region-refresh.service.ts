@@ -326,10 +326,10 @@ export class RegionRefreshService {
       }
 
       for (const [songId, newVersion] of songVersionUpdates) {
-        await client.query(
-          `update app.songs set version = $2 where id = $1`,
-          [songId, newVersion],
-        );
+        await client.query(`update app.songs set version = $2 where id = $1`, [
+          songId,
+          newVersion,
+        ]);
       }
 
       // Song level: available in a region when any of its charts is.

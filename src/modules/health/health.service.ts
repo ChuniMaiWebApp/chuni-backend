@@ -23,8 +23,13 @@ export class HealthService {
     const dependencies: Record<string, DependencyStatus> = {
       postgres: postgresUp ? 'up' : 'down',
       redis: redisUp ? 'up' : 'down',
-      supabase: supabaseUp ? 'up' : 'down',
     };
+
+    // null means this deployment has no Supabase stack — reporting it "down"
+    // would leave /health permanently degraded and make the deploy gate useless.
+    if (supabaseUp !== null) {
+      dependencies.supabase = supabaseUp ? 'up' : 'down';
+    }
 
     const allUp = Object.values(dependencies).every(
       (status) => status === 'up',

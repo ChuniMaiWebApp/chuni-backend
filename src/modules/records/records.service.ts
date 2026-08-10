@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import {
   calculateMaxOverpowerMilli,
@@ -301,8 +301,9 @@ export class RecordsService {
   async scoresForSong(userId: string, songId: number) {
     if (userId) {
       try {
-        const liveScores = await this.auth.withChunithmSession(userId, (session) =>
-          session.getMusicRecordDetail(songId),
+        const liveScores = await this.auth.withChunithmSession(
+          userId,
+          (session) => session.getMusicRecordDetail(songId),
         );
         if (liveScores && liveScores.length > 0) {
           await this.repository.upsertScores(userId, liveScores);

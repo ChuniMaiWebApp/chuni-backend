@@ -22,7 +22,8 @@ export class SongsController {
 
   @Get('songs/search')
   @ApiOperation({
-    summary: 'Search and filter songs by title, artist, genre, version, difficulty, constant, bpm, and region',
+    summary:
+      'Search and filter songs by title, artist, genre, version, difficulty, constant, bpm, and region',
   })
   search(
     @Query('q') query?: string,
@@ -47,8 +48,7 @@ export class SongsController {
         ? Number(val)
         : undefined;
 
-    const resolvedRegion =
-      region || (available === 'true' ? 'intl' : 'all');
+    const resolvedRegion = region || (available === 'true' ? 'intl' : 'all');
 
     return this.songs.searchWithOptions({
       query: query || '',

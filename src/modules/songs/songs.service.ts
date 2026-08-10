@@ -177,7 +177,9 @@ export class SongsService {
     return res.songs;
   }
 
-  async searchWithOptions(options: import('./songs.repository').SongSearchOptions) {
+  async searchWithOptions(
+    options: import('./songs.repository').SongSearchOptions,
+  ) {
     const { rows, total } = await this.repository.searchWithOptions(options);
 
     const page = Math.max(options.page || 1, 1);
