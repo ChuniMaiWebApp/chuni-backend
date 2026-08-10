@@ -2,16 +2,15 @@
 # =============================================================================
 # Deploys the API on the VPS.
 #
-#   ./scripts/deploy.sh              # normal deploy
-#   ./scripts/deploy.sh --first-run  # `pm2 start` instead of reload
+#   ./scripts/deploy.sh
 #
 # GitHub Actions calls this over SSH. Keeping the steps in the repository
 # rather than inline in the workflow means a deploy can be run by hand in
 # exactly the same way when CI is unavailable — and that the two cannot drift.
 #
-# On a failed health check it puts the previous commit back and rebuilds.
-# Migrations are not reverted: they are additive by construction, so the
-# previous build runs fine against the newer schema.
+# On a failed health check it puts the previous image back. Migrations are not
+# reverted: they are additive by construction, so the previous build runs fine
+# against the newer schema.
 # =============================================================================
 
 set -euo pipefail
@@ -19,10 +18,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-FIRST_RUN=false
-[ "${1:-}" = "--first-run" ] && FIRST_RUN=true
-
 HEALTH="http://127.0.0.1:3333/api/v1/health"
+ROLLBACK_TAG="chunimai/api:rollback"
 
 log()  { printf '\n\033[1;36m▸ %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31m✖ %s\033[0m\n' "$*" >&2; }
@@ -30,47 +27,56 @@ fail() { printf '\n\033[1;31m✖ %s\033[0m\n' "$*" >&2; }
 preflight() {
   [ -f .env ] || { fail ".env is missing. Copy .env.production.example."; exit 1; }
 
-  # The data services belong to chunimai-database. If Postgres is not up, the
-  # migration step would fail halfway through a deploy instead of before it.
-  if ! timeout 3 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5432' 2>/dev/null; then
-    fail "Nothing is listening on 127.0.0.1:5432."
-    fail "Start it from the database repo:"
-    fail "  cd ../chunimai-database && docker compose -f docker-compose.prod.yml --env-file .env.prod up -d"
+  if ! docker network inspect chunimai >/dev/null 2>&1; then
+    fail "The 'chunimai' network does not exist. Create it once:"
+    fail "  docker network create chunimai"
     exit 1
   fi
 
-  if ! timeout 3 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6379' 2>/dev/null; then
-    fail "Nothing is listening on 127.0.0.1:6379 — Redis holds the sign-in throttle."
+  # The data services belong to chunimai-database. Without them the migration
+  # step would fail halfway through a deploy rather than before it starts.
+  if ! docker ps --format '{{.Names}}' | grep -q '^chunimai-postgres$'; then
+    fail "chunimai-postgres is not running. Start it from the database repo:"
+    fail "  cd ../chunimai-database && ./scripts/deploy.sh"
     exit 1
   fi
 }
 
-build_and_reload() {
-  log "Installing dependencies"
-  # `npm ci` rather than `npm install`: it installs exactly the committed
-  # lockfile, so a deploy cannot pick up a different transitive version than
-  # the one CI just tested.
-  npm ci
+log "===== API DEPLOY $(date -u +%Y-%m-%dT%H:%M:%SZ) ====="
 
-  log "Building"
-  npm run build
+preflight
 
-  log "Applying database migrations"
-  npm run migrate
+log "Fetching latest code"
+# Whatever branch the checkout is on. Hardcoding `main` breaks silently on a
+# repo whose default is still `master`.
+BRANCH="${DEPLOY_BRANCH:-$(git symbolic-ref --short HEAD)}"
+git fetch --prune origin
+git reset --hard "origin/$BRANCH"
+log "Deploying commit: $(git rev-parse --short HEAD) on $BRANCH"
 
-  if [ "$FIRST_RUN" = true ]; then
-    log "Starting PM2 process"
-    pm2 start ecosystem.config.js
-    pm2 save
-  else
-    log "Reloading PM2 process"
-    pm2 startOrReload ecosystem.config.js --update-env
-  fi
-}
+# Keep the image that is currently serving, so a failed health check has
+# something to go back to that does not require rebuilding from source.
+if docker image inspect chunimai/api:latest >/dev/null 2>&1; then
+  docker tag chunimai/api:latest "$ROLLBACK_TAG"
+  HAVE_ROLLBACK=true
+else
+  HAVE_ROLLBACK=false
+fi
 
-# Polls until the API answers, or gives up. Without this the deploy reports
-# success as soon as PM2 accepts the reload — which it does even for a process
-# that crashes a second later on a bad env var.
+log "Building image"
+docker compose build
+
+log "Applying database migrations"
+# Runs against the *new* code before the new container takes over, so the
+# schema is never behind the process reading it.
+docker compose run --rm migrate
+
+log "Starting container"
+docker compose up -d
+
+# Polls until the API answers. Without this the deploy reports success as soon
+# as compose accepts the container — which it does even for a process that
+# crashes a second later on a bad env var.
 health_check() {
   log "Health check"
 
@@ -101,46 +107,28 @@ health_check() {
   return 1
 }
 
-rollback() {
-  local previous="$1"
-
-  fail "Rolling back to $previous"
-  git reset --hard "$previous"
-  npm ci
-  npm run build
-  pm2 startOrReload ecosystem.config.js --update-env
-
-  if health_check; then
-    fail "Rolled back to $previous. The new commit is broken — do not redeploy it unchanged."
-    exit 1
-  fi
-
-  fail "ROLLBACK ALSO FAILED. The API is down. Check: pm2 logs chuni-backend --lines 100"
-  exit 2
-}
-
-log "===== API DEPLOY $(date -u +%Y-%m-%dT%H:%M:%SZ) ====="
-
-preflight
-
-PREVIOUS_SHA=$(git rev-parse HEAD)
-log "Current commit: $PREVIOUS_SHA"
-
-log "Fetching latest code"
-# Whatever branch the checkout is on. Hardcoding `main` breaks silently on a
-# repo whose default is still `master`: the fetch succeeds, the reset fails,
-# and `set -e` aborts the deploy with a message about an unknown revision.
-BRANCH="${DEPLOY_BRANCH:-$(git symbolic-ref --short HEAD)}"
-git fetch --prune origin
-git reset --hard "origin/$BRANCH"
-log "Deploying commit: $(git rev-parse HEAD) on $BRANCH"
-
-build_and_reload
-
 if health_check; then
-  log "===== API DEPLOY OK — $(git rev-parse HEAD) ====="
-  pm2 save
+  log "===== API DEPLOY OK — $(git rev-parse --short HEAD) ====="
+  docker image prune -f >/dev/null 2>&1 || true
   exit 0
 fi
 
-rollback "$PREVIOUS_SHA"
+fail "Deploy failed. Container logs:"
+docker compose logs --tail 40 api || true
+
+if [ "$HAVE_ROLLBACK" = true ]; then
+  fail "Rolling back to the previous image"
+  docker tag "$ROLLBACK_TAG" chunimai/api:latest
+  docker compose up -d --no-build
+
+  if health_check; then
+    fail "Rolled back. The new commit is broken — do not redeploy it unchanged."
+    exit 1
+  fi
+
+  fail "ROLLBACK ALSO FAILED. Check: docker compose logs api"
+  exit 2
+fi
+
+fail "No previous image to roll back to (first deploy)."
+exit 1

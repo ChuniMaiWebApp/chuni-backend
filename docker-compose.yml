@@ -1,0 +1,60 @@
+# =============================================================================
+# ChuniMai API
+#
+#   docker compose up -d --build        # deploy
+#   docker compose logs -f api          # follow logs
+#   docker compose ps                   # status
+#   docker compose run --rm migrate     # apply database migrations
+#   docker compose restart api
+#   docker compose down
+#
+# Joins the `chunimai` network, which chunimai-database owns. Create it once:
+#   docker network create chunimai
+#
+# Postgres and Redis are reached by name across that network — `postgres:5432`,
+# not `127.0.0.1:5432`. Inside a container, loopback is the container's own.
+# =============================================================================
+
+services:
+  api:
+    build:
+      context: .
+      target: runner
+    image: chunimai/api:latest
+    container_name: chuni-backend
+    restart: unless-stopped
+    env_file: [.env]
+    ports:
+      # 127.0.0.1 only. Docker publishes to 0.0.0.0 by default and writes its
+      # own iptables rule that UFW never sees, so a wildcard publish would put
+      # the API on the internet with the firewall still reporting "deny".
+      # nginx on the host is the only thing that should reach it.
+      - '127.0.0.1:3333:3333'
+    networks:
+      chunimai:
+        aliases: [chuni-backend, api]
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  # One-shot. `docker compose up` never starts it — profiles keep it out — but
+  # `docker compose run --rm migrate` does, reusing the builder stage that
+  # still has ts-node and the migrations/ directory.
+  migrate:
+    build:
+      context: .
+      target: builder
+    image: chunimai/api-builder:latest
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+    command: npm run migrate
+    networks: [chunimai]
+    profiles: [tools]
+    restart: 'no'
+
+networks:
+  chunimai:
+    external: true

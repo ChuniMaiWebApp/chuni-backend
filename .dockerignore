@@ -1,0 +1,20 @@
+# Anything here is either rebuilt inside the image or must never enter it.
+node_modules
+dist
+coverage
+logs
+
+# Secrets. compose passes the real values through env_file at run time; baking
+# them into a layer would leave them readable in the image forever.
+.env
+.env.local
+.env.*.local
+
+.git
+.github
+.gitignore
+.gitattributes
+.editorconfig
+*.md
+*.log
+tsconfig.build.tsbuildinfo
