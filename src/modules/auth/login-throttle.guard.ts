@@ -10,8 +10,17 @@ import type { Request } from 'express';
 import { RedisService } from '../../shared/redis/redis.service';
 
 const WINDOW_SECONDS = 15 * 60;
-const MAX_ATTEMPTS_PER_IP = 10;
-const MAX_ATTEMPTS_PER_ACCOUNT = 5;
+
+// Doubled from 10/5 after the first real sign-in test hit the ceiling. The old
+// per-account figure was the binding one: five attempts is fewer than it
+// sounds, because a mistyped password, a page reload and a retry from the
+// phone all count, and an arcade full of players shares one venue IP.
+//
+// Still low enough to matter. A password-spraying run needs thousands of
+// attempts, not twenty — and the point of these numbers is to make the app
+// useless as a proxy for that, not to catch a player fumbling their password.
+const MAX_ATTEMPTS_PER_IP = 20;
+const MAX_ATTEMPTS_PER_ACCOUNT = 10;
 
 /**
  * Rate limits sign-in attempts.
