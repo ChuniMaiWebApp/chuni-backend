@@ -4,17 +4,30 @@
  */
 const { readdirSync, readFileSync } = require('fs');
 const { join } = require('path');
-require('dotenv').config({ path: join(__dirname, '..', '.env') });
+
+// Safely load dotenv if available or if .env exists
+try {
+  require('dotenv').config({ path: join(__dirname, '..', '.env') });
+} catch (e) {
+  // Ignore if dotenv is not installed in current environment
+}
+
 const { Client } = require('pg');
 
 const MIGRATIONS_DIR = join(__dirname, '..', 'migrations');
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL;
+  let connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
-    console.error('DATABASE_URL is not set. Please set DATABASE_URL in .env');
+    console.error('DATABASE_URL is not set. Please set DATABASE_URL in .env or environment');
     process.exit(1);
+  }
+
+  // Trim newlines/spaces and fallback @postgres: to @127.0.0.1: when running outside container
+  connectionString = connectionString.trim();
+  if (connectionString.includes('@postgres:')) {
+    connectionString = connectionString.replace('@postgres:', '@127.0.0.1:');
   }
 
   const client = new Client({ connectionString });
