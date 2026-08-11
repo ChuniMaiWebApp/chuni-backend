@@ -40,8 +40,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
-# Song and course fixtures the seeding paths read at runtime.
-COPY data ./data
+# Song and course fixtures (removed if data directory does not exist)
+# COPY data ./data
 
 # node:22-alpine ships an unprivileged `node` user; root inside a container is
 # still root on the host if anything ever escapes.
