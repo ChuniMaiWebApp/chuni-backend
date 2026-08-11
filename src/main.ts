@@ -52,7 +52,7 @@ async function bootstrap(): Promise<void> {
 
   if (swaggerEnabled) {
     const documentConfig = new DocumentBuilder()
-      .setTitle('ChunithmQueue API')
+      .setTitle('ChunithmWebApp API')
       .setDescription('Backend API for the Chunithm queue web app')
       .setVersion('0.1.0')
       .addBearerAuth()

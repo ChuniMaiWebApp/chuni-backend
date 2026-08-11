@@ -1,4 +1,4 @@
--- Core tables for ChunithmQueue.
+-- Core tables for ChunithmWebApp.
 --
 -- Everything the app owns lives in the `app` schema so it never collides with
 -- the schemas Supabase manages (auth, storage, realtime, public/PostgREST).

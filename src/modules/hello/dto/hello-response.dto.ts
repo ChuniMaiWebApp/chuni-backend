@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class HelloResponseDto {
-  @ApiProperty({ example: 'Hello World from ChunithmQueue API 🐧' })
+  @ApiProperty({ example: 'Hello World from ChunithmWebApp API 🐧' })
   message: string;
 
   @ApiProperty({ example: 'development' })

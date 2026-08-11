@@ -10,7 +10,7 @@ export class HelloService {
 
   getHello(): HelloResponseDto {
     return {
-      message: 'Hello World from ChunithmQueue API 🐧',
+      message: 'Hello World from ChunithmWebApp API 🐧',
       environment: this.config.get('env', { infer: true }),
       timestamp: new Date().toISOString(),
     };
