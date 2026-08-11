@@ -8,9 +8,10 @@ on:
   workflow_dispatch:
 
 # Two pushes in quick succession would otherwise race on the VPS: both would
-# `git reset --hard origin/main`, both would build into the same directory, and
-# PM2 would reload whichever finished last. Queue them instead —
-# `cancel-in-progress: false` because cancelling mid-deploy is worse than waiting.
+# reset the same checkout, both would build into the same image tag, and the
+# container would end up running whichever finished last. Queue them instead —
+# `cancel-in-progress: false` because cancelling mid-deploy is worse than
+# waiting: the rollback tag would point at a half-replaced image.
 concurrency:
   group: deploy-backend-production
   cancel-in-progress: false
@@ -22,9 +23,9 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
