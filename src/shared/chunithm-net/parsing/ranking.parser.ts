@@ -1,11 +1,6 @@
 import { load } from 'cheerio';
 
-import {
-  EXTRA_LINKED_GATE_BADGES,
-  LINKED_GATE_BADGES,
-  LinkedGate,
-  LinkedGateStatus,
-} from '../linked-verse';
+import { LinkedGate, LinkedGateStatus } from '../linked-verse';
 import { chuniInt, extractLastPart, parseChunithmDate } from './utils';
 
 export interface LeaderboardEntry {
@@ -157,7 +152,18 @@ export interface LinkedGateProgress {
 }
 
 /** Parses `GET /mobile/home/linkedVerse/` — progress through the Linked GATEs. */
-export function parseLinkedVerse(html: string): LinkedGateProgress[] {
+export function parseLinkedVerse(
+  html: string,
+  /**
+   * Filename to status, as far as anyone has established it.
+   *
+   * Passed in rather than imported: what a badge means is knowledge that
+   * accumulates, and it lives in `app.linked_gate_badges` so it can be added
+   * to without a deploy. A parser that reached for it itself would have to
+   * reach into the database, which is not this layer's business.
+   */
+  badges: Readonly<Record<string, LinkedGateStatus>> = {},
+): LinkedGateProgress[] {
   const $ = load(html);
   const gates = Object.values(LinkedGate);
   const result: LinkedGateProgress[] = [];
@@ -171,15 +177,14 @@ export function parseLinkedVerse(html: string): LinkedGateProgress[] {
       const source = $(element).attr('src');
       const filename = source?.split('/').pop()?.split('.')[0] ?? '';
 
-      // Locally observed badges win: SEGA adds a gate every version and the
-      // generated table lags behind.
-      const status =
-        EXTRA_LINKED_GATE_BADGES[filename] ?? LINKED_GATE_BADGES[filename];
+      const status = badges[filename];
 
       result.push({
         gate,
-        // Never fall back to NOT_FOUND. An unrecognised badge is a gap in our
-        // table, not a statement about the player's progress.
+        // Never fall back to NOT_FOUND. An unrecognised badge is a gap in the
+        // lookup, not a statement about the player's progress — reporting one
+        // as "not found" once told players who had cleared SUN and LUMINOUS
+        // that they had never even found those gates.
         status: status ?? LinkedGateStatus.UNKNOWN,
         // The game's own badge art for this gate in this state. Nothing we
         // could draw would be as recognisable to a player as the hexagon they

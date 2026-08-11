@@ -1,29 +1,28 @@
--- Replaces 0008's approach with a single source that already answers the
--- question, per chart.
+-- Regional availability moves from the song to the chart.
 --
--- 0008 tried to reconstruct International availability from three signals:
--- SEGA's International music list, SEGA's Japanese one, and a live probe of
--- the International jacket CDN. That worked, but it was reconstruction. Two
--- of those sources are periodic snapshots (the International list read on
--- 2026-08-07 was published 2026-04-09), and none of them lists songs that are
--- unlocked through missions or Linked VERSE gates — which is precisely why
--- Phantom Crisis and Melodiniq were absent from both.
+-- 0008 recorded it per song and reconstructed it from indirect signals: the
+-- two published music lists plus a live probe of the International jacket CDN.
+-- Both of those assumptions turned out to be wrong.
 --
--- arcade-songs (zetaraku) already merges those sources and publishes a
--- per-chart `regions: { jp, intl }`, refreshed daily. Checked against this
--- installation's real play data:
+-- Wrong shape: availability is a property of the chart, not the song. Five
+-- songs ship on International without their ULTIMA, and one WORLD'S END song
+-- ships only one of its two charts. Per song there is no way to say that.
 --
---     432 / 432 songs the player has cleared  -> intl = true
---     516 / 516 charts the player has cleared -> intl = true
---     Melodiniq      -> intl = false on every chart   (matches the game)
---     Phantom Crisis -> intl = true  on every chart   (matches the game)
+-- Wrong signals: a published music list is a snapshot — the International one
+-- read on 2026-08-07 had been published on 2026-04-09 — and neither regional
+-- list includes songs unlocked through a mission or a Linked VERSE gate, which
+-- is why Phantom Crisis and Melodiniq were missing from both. A song a player
+-- can sit down and play is not "unavailable" because a static page has not
+-- caught up.
 --
--- Not one disagreement, including on the 97 songs both official lists miss.
--- So the reconstructed signals are dropped rather than kept as a second
--- opinion that can only ever add noise.
+-- So the columns below are written from what each region itself reports, and
+-- the indirect signals are dropped rather than kept as a second opinion that
+-- can only add noise. Which sources those are is the application's business
+-- and has changed since; see AvailabilityRefreshService.
 --
--- Per chart, not per song: five songs ship on International without their
--- ULTIMA, and one WORLD'S END song ships only one of its two charts.
+-- Whatever fills them, the acceptance test does not change: every chart this
+-- installation's players have actually cleared must come back marked
+-- available on International, and songs known to be Japan-only must not.
 
 alter table app.songs
     drop column if exists listed_intl,

@@ -37,6 +37,3 @@ export enum LinkedGateStatus {
    */
   UNKNOWN = 'unknown',
 }
-
-export { LINKED_GATE_BADGES } from './linked-gate-badges';
-export { EXTRA_LINKED_GATE_BADGES } from './linked-gate-badges.extra';

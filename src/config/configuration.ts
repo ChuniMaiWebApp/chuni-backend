@@ -48,6 +48,15 @@ export interface AppConfig {
      * outbound calls, or when a second deployment already owns the job.
      */
     autoRefresh: boolean;
+
+    /**
+     * Token for chunirec's developer API, the source of chart constants.
+     *
+     * Without it the catalogue still loads — titles, artists, levels, jackets
+     * all come from SEGA — but every chart arrives without a constant, and
+     * play rating cannot be computed from a chart that has none.
+     */
+    chunirecToken: string;
   };
 }
 
@@ -95,5 +104,6 @@ export const configuration = (): AppConfig => ({
   },
   songData: {
     autoRefresh: process.env.SONG_DATA_AUTO_REFRESH !== 'false',
+    chunirecToken: process.env.CHUNIREC_TOKEN ?? '',
   },
 });

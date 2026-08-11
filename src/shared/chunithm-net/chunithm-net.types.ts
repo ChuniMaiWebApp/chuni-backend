@@ -135,8 +135,20 @@ export enum Possession {
 }
 
 export interface Title {
+  /** Empty for collaboration titles, whose wording exists only in `imageUrl`. */
   content: string;
+
+  /**
+   * Plate to draw `content` on, from the background filename. `special` for a
+   * collaboration title, which comes as finished artwork instead of a plate.
+   */
   rarity: string;
+
+  /**
+   * The finished image, for titles the game draws rather than composes.
+   * Null for ordinary titles, which are a plate plus text.
+   */
+  imageUrl: string | null;
 }
 
 export interface Team {

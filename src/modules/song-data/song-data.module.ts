@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
 
-import { RegionRefreshService } from './region-refresh.service';
-import { SeedRefreshService } from './seed-refresh.service';
+import { CatalogueRefreshService } from './catalogue-refresh.service';
+import { AvailabilityRefreshService } from './availability-refresh.service';
 import { SongDataScheduler } from './song-data.scheduler';
 
 /**
@@ -14,7 +14,11 @@ import { SongDataScheduler } from './song-data.scheduler';
  */
 @Module({
   imports: [ScheduleModule.forRoot()],
-  providers: [SeedRefreshService, RegionRefreshService, SongDataScheduler],
-  exports: [SeedRefreshService, RegionRefreshService],
+  providers: [
+    CatalogueRefreshService,
+    AvailabilityRefreshService,
+    SongDataScheduler,
+  ],
+  exports: [CatalogueRefreshService, AvailabilityRefreshService],
 })
 export class SongDataModule {}

@@ -84,7 +84,10 @@ describe('parseLinkedVerse', () => {
     expect(entry.unrecognisedBadge).toBe('NOTAREALBADGEHASH0000000000000000');
   });
 
-  it('recognises the SUN and LUMINOUS badges observed on live CHUNITHM-NET', () => {
+  it('uses the lookup it is given', () => {
+    // What a badge means lives in app.linked_gate_badges, so that a gate SEGA
+    // added this version can be labelled without a deploy. The parser only
+    // applies whatever it is handed.
     const html = `
       <div class="linked_verse_icon_status_block">
         <div class="linked_verse_icon_block">
@@ -95,9 +98,19 @@ describe('parseLinkedVerse', () => {
         </div>
       </div>`;
 
+    const badges = {
+      '0W4PTHG72IIN3OIG0GBR3SF8OPB87CPN': LinkedGateStatus.CLEAR,
+      '7Q0L2EVXCT9VNA4XNS3D8ELZ61QO21AV': LinkedGateStatus.CLEAR,
+    };
+
+    expect(parseLinkedVerse(html, badges).map((entry) => entry.status)).toEqual(
+      [LinkedGateStatus.CLEAR, LinkedGateStatus.CLEAR],
+    );
+
+    // Without it, the same page is honestly unknown rather than wrong.
     expect(parseLinkedVerse(html).map((entry) => entry.status)).toEqual([
-      LinkedGateStatus.CLEAR,
-      LinkedGateStatus.CLEAR,
+      LinkedGateStatus.UNKNOWN,
+      LinkedGateStatus.UNKNOWN,
     ]);
   });
 });

@@ -2,8 +2,8 @@ import { ConfigService } from '@nestjs/config';
 
 import { DatabaseService } from '../../shared/database/database.service';
 import { RedisService } from '../../shared/redis/redis.service';
-import { RegionRefreshService } from './region-refresh.service';
-import { SeedRefreshService } from './seed-refresh.service';
+import { CatalogueRefreshService } from './catalogue-refresh.service';
+import { AvailabilityRefreshService } from './availability-refresh.service';
 import { SongDataScheduler } from './song-data.scheduler';
 
 /**
@@ -17,17 +17,17 @@ const build = (options: {
   lockAcquired?: boolean | Error;
   lastRefreshAgeHours?: number | null;
   refreshFails?: boolean;
-  seedFails?: boolean;
+  catalogueFails?: boolean;
 }) => {
-  const seedRefresh = jest.fn(() =>
-    options.seedFails
-      ? Promise.reject(new Error('github is down'))
+  const catalogueRefresh = jest.fn(() =>
+    options.catalogueFails
+      ? Promise.reject(new Error('sega is down'))
       : Promise.resolve({
           changed: true,
-          songCount: 2223,
-          chartCount: 7760,
-          aliasCount: 0,
-          courseCount: 0,
+          songCount: 1734,
+          chartCount: 7000,
+          chartsWithConstant: 2785,
+          unmatchedSongs: 0,
           newestRelease: null,
           skippedTracks: [],
         }),
@@ -72,20 +72,20 @@ const build = (options: {
         ),
     } as unknown as DatabaseService,
     { client: { set, del } } as unknown as RedisService,
-    { refresh: seedRefresh } as unknown as SeedRefreshService,
-    { refresh } as unknown as RegionRefreshService,
+    { refresh: catalogueRefresh } as unknown as CatalogueRefreshService,
+    { refresh } as unknown as AvailabilityRefreshService,
   );
 
-  return { scheduler, refresh, seedRefresh, set, del };
+  return { scheduler, refresh, catalogueRefresh, set, del };
 };
 
 describe('SongDataScheduler', () => {
   it('refreshes on the daily run and releases the lock afterwards', async () => {
-    const { scheduler, refresh, seedRefresh, set, del } = build({});
+    const { scheduler, refresh, catalogueRefresh, set, del } = build({});
 
     await scheduler.scheduledRefresh();
 
-    expect(seedRefresh).toHaveBeenCalledTimes(1);
+    expect(catalogueRefresh).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledTimes(1);
     // NX + EX, so a crashed instance cannot hold the lock forever.
     expect(set).toHaveBeenCalledWith(
@@ -126,14 +126,14 @@ describe('SongDataScheduler', () => {
   });
 
   it('does nothing at all when auto refresh is switched off', async () => {
-    const { scheduler, refresh, seedRefresh, set } = build({
+    const { scheduler, refresh, catalogueRefresh, set } = build({
       autoRefresh: false,
     });
 
     await scheduler.scheduledRefresh();
     await scheduler.onApplicationBootstrap();
 
-    expect(seedRefresh).not.toHaveBeenCalled();
+    expect(catalogueRefresh).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
     expect(set).not.toHaveBeenCalled();
   });
@@ -141,11 +141,13 @@ describe('SongDataScheduler', () => {
   it('still applies region data when the catalogue refresh fails', async () => {
     // The two upstreams are independent. A GitHub outage must not also cost
     // players the Inter/Japan labelling, which is the part they actually see.
-    const { scheduler, refresh, seedRefresh } = build({ seedFails: true });
+    const { scheduler, refresh, catalogueRefresh } = build({
+      catalogueFails: true,
+    });
 
     await expect(scheduler.scheduledRefresh()).resolves.toBeUndefined();
 
-    expect(seedRefresh).toHaveBeenCalledTimes(1);
+    expect(catalogueRefresh).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 

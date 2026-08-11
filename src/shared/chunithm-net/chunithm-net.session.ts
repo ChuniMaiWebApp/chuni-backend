@@ -30,6 +30,11 @@ import {
   readRatingFromImages,
   type Leaderboard,
 } from './parsing/ranking.parser';
+import {
+  parseMusicCatalogue,
+  type ListedChart,
+} from './parsing/catalogue.parser';
+import type { LinkedGateStatus } from './linked-verse';
 import { chuniInt } from './parsing/utils';
 import {
   parseMusicList,
@@ -473,6 +478,52 @@ export class ChunithmNetSession {
     return all;
   }
 
+  /**
+   * Every chart this server carries, whether or not the player has played it.
+   *
+   * The music list is the International server's own inventory, which is the
+   * only complete statement of what is playable there: SEGA's published lists
+   * are periodic snapshots and omit songs unlocked through missions and Linked
+   * VERSE gates.
+   *
+   * Six requests, run sequentially for the same reason `getAllPersonalBests`
+   * does — five parallel requests would burst through the shared rate limit,
+   * and the whole instance shares one IP with SEGA.
+   *
+   * Any signed-in session gives the same answer: the inventory belongs to the
+   * server, not to the account reading it.
+   */
+  async getMusicCatalogue(): Promise<ListedChart[]> {
+    const charts: ListedChart[] = [];
+
+    for (const difficulty of [
+      Difficulty.BASIC,
+      Difficulty.ADVANCED,
+      Difficulty.EXPERT,
+      Difficulty.MASTER,
+      Difficulty.ULTIMA,
+    ]) {
+      const name = Difficulty[difficulty];
+      const endpoint = `send${name.charAt(0)}${name.slice(1).toLowerCase()}`;
+
+      charts.push(
+        ...parseMusicCatalogue(
+          await this.request('POST', `mobile/record/musicGenre/${endpoint}`, {
+            genre: '99', // all genres
+          }),
+        ),
+      );
+    }
+
+    charts.push(
+      ...parseMusicCatalogue(
+        await this.request('GET', 'mobile/record/worldsEndList'),
+      ),
+    );
+
+    return charts;
+  }
+
   /** The 30 old-version scores the game itself counts towards rating. */
   async getBest30(): Promise<PersonalBest[]> {
     return parseMusicList(
@@ -555,9 +606,18 @@ export class ChunithmNetSession {
     return parseLoginBonus(await this.request('GET', 'mobile/loginBonus/'));
   }
 
-  async getLinkedVerseProgress() {
+  /**
+   * @param badges filename-to-status, as far as it has been established. The
+   *   session has no database of its own, so the caller supplies it; anything
+   *   missing comes back as UNKNOWN with the filename attached, which is what
+   *   lets the caller record it for labelling.
+   */
+  async getLinkedVerseProgress(
+    badges: Readonly<Record<string, LinkedGateStatus>> = {},
+  ) {
     return parseLinkedVerse(
       await this.request('GET', 'mobile/home/linkedVerse/'),
+      badges,
     );
   }
 

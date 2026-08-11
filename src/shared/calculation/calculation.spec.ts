@@ -3,9 +3,14 @@ import { calculateOverpower } from './overpower';
 import { calculateRating, calculateScoreForRating } from './rating';
 
 /**
- * Every expectation below was read off the live bot (chuni penguin) against a
- * real CHUNITHM International profile on 2026-08-06, so these lock the port to
- * observed game behaviour rather than to our reading of the formula.
+ * Every expectation below is a rating and OVER POWER the game itself awarded
+ * for that score on that chart, taken from a real CHUNITHM International
+ * profile on 2026-08-06.
+ *
+ * They lock the implementation to observed game behaviour rather than to our
+ * reading of the curve — which is the only thing worth testing here, since a
+ * formula that agrees with our own derivation but not with the cabinet is
+ * simply wrong.
  */
 interface Vector {
   name: string;

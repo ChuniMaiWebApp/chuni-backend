@@ -19,8 +19,12 @@ export function normalizeClal(raw: string): string | null {
  * Hands out CHUNITHM-NET sessions that all share one outbound rate limit.
  *
  * SEGA sees a single IP for the whole instance, so the ceiling has to be
- * global — 10 requests/second matches what chuni-penguin has run in production
- * without being throttled.
+ * global rather than per player: ten sessions each politely pacing themselves
+ * still arrive at SEGA as one host hammering it.
+ *
+ * Ten per second with a burst of ten. Sized to stay under what a browser on
+ * the same pages would generate, since that is the traffic SEGA expects; a
+ * blocked IP takes the whole instance down, not one account.
  */
 @Injectable()
 export class ChunithmNetService {

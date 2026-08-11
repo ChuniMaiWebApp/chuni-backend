@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { load } from 'cheerio';
+
 import {
   ChainLamp,
   ClearLamp,
@@ -13,6 +15,7 @@ import {
 import {
   parseCollectionCustomise,
   parseHomePage,
+  parsePlayerCard,
   parsePlayerData,
 } from './profile.parser';
 import {
@@ -22,8 +25,15 @@ import {
 } from './record.parser';
 
 /**
- * Fixtures are real CHUNITHM-NET responses, taken from chuni-penguin's test
- * suite (0BSD). Parsing SEGA's markup is guesswork without them.
+ * Fixtures are real CHUNITHM-NET responses — SEGA's own markup, saved to disk.
+ * Parsing it is guesswork without them, and a live account cannot be a test
+ * dependency: the scores move, and the tests would fail for reasons that have
+ * nothing to do with the parser.
+ *
+ * Recapture them from an account of your own with:
+ *   npx ts-node scripts/capture-fixtures.ts
+ * Expect assertions on player name, scores and dates to need updating with
+ * them — they describe whichever profile produced the capture.
  */
 const fixture = (name: string) =>
   readFileSync(
@@ -54,10 +64,34 @@ describe('parsePlayerData', () => {
 
   it('collects equipped titles', () => {
     expect(profile.titles.length).toBeGreaterThan(0);
+    // An ordinary title: a named rarity plate with the wording in the DOM, so
+    // it can be redrawn rather than shown as artwork.
     expect(profile.titles[0]).toEqual({
       content: 'ネコぱら',
       rarity: 'silver',
+      imageUrl: null,
     });
+  });
+
+  it('hands a collaboration title back as its own artwork', () => {
+    // These bake the wording into the image, so there is nothing in the DOM to
+    // read. Rather than look the filename up in a table — which can only cover
+    // titles somebody already catalogued — the image is passed through and
+    // drawn as the game drew it.
+    const html = `
+      <div class="player_honor_short"
+           style="background-image:url(https://chunithm-net-eng.com/mobile/img/ddd90be40f2a38ec.png)">
+      </div>`;
+    const { titles } = parsePlayerCard(load(html));
+
+    expect(titles).toEqual([
+      {
+        content: '',
+        rarity: 'special',
+        imageUrl:
+          'https://chunithm-net-eng.com/mobile/img/ddd90be40f2a38ec.png',
+      },
+    ]);
   });
 
   it('reads the last play date as an instant, not a naive string', () => {

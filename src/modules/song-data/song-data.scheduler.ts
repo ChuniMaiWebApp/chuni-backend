@@ -5,17 +5,16 @@ import { Cron } from '@nestjs/schedule';
 import type { AppConfig } from '../../config';
 import { DatabaseService } from '../../shared/database/database.service';
 import { RedisService } from '../../shared/redis/redis.service';
-import { RegionRefreshService } from './region-refresh.service';
-import { SeedRefreshService } from './seed-refresh.service';
+import { CatalogueRefreshService } from './catalogue-refresh.service';
+import { AvailabilityRefreshService } from './availability-refresh.service';
 
 /**
  * Keeps the song data current without anyone remembering to.
  *
- * Two passes, in order: the catalogue itself (chuni-penguin), then which of
- * its charts each region actually has (arcade-songs). Both upstreams publish
- * daily in the small hours UTC — arcade-songs at 06:43 UTC on the day this was
- * written — so the job runs at 08:00 UTC, after publication and while nobody
- * is playing.
+ * Two passes, in order: the catalogue itself — SEGA's own music list, with
+ * chart constants from chunirec — then which of its charts each region
+ * actually has. The job runs at 08:00 UTC, after the upstreams publish and
+ * while nobody is playing.
  *
  * Safe to run unattended because neither pass can lose data: the catalogue is
  * upserted rather than replaced, and the region pass writes four boolean
@@ -37,8 +36,8 @@ export class SongDataScheduler implements OnApplicationBootstrap {
     private readonly config: ConfigService<AppConfig, true>,
     private readonly db: DatabaseService,
     private readonly redis: RedisService,
-    private readonly seed: SeedRefreshService,
-    private readonly regions: RegionRefreshService,
+    private readonly catalogue: CatalogueRefreshService,
+    private readonly availability: AvailabilityRefreshService,
   ) {}
 
   private get enabled(): boolean {
@@ -103,7 +102,7 @@ export class SongDataScheduler implements OnApplicationBootstrap {
       // independently — a catalogue that is briefly stale is much better than
       // skipping the region pass, which is what decides what players can see.
       try {
-        await this.seed.refresh();
+        await this.catalogue.refresh();
       } catch (error) {
         this.logger.error(
           `Song catalogue refresh failed, keeping the previous data: ${(error as Error).message}`,
@@ -111,7 +110,7 @@ export class SongDataScheduler implements OnApplicationBootstrap {
       }
 
       try {
-        await this.regions.refresh();
+        await this.availability.refresh();
       } catch (error) {
         this.logger.error(
           `Region refresh failed, keeping the previous data: ${(error as Error).message}`,

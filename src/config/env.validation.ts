@@ -161,6 +161,17 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   SONG_DATA_AUTO_REFRESH: string = 'true';
+
+  /**
+   * chunirec developer API token — https://developer.chunirec.net/
+   *
+   * Optional so the application still boots without it, but the catalogue
+   * loads with no chart constants and every rating reads as zero. Treat a
+   * missing token as a broken deployment rather than a supported mode.
+   */
+  @IsString()
+  @IsOptional()
+  CHUNIREC_TOKEN: string = '';
 }
 
 export function validateEnv(config: Record<string, unknown>) {

@@ -8,7 +8,6 @@ import {
   type Team,
   type Title,
 } from '../chunithm-net.types';
-import { SPECIAL_TITLES } from './special-titles';
 import {
   backgroundImageUrl,
   chuniInt,
@@ -31,9 +30,19 @@ const TEAM_EMBLEM_SELECTOR = [
   .join(', ');
 
 /**
- * Titles ("trophies") come in two flavours: ordinary ones whose rarity is in
- * the background filename, and collaboration ones whose text lives only in the
- * image. The latter are looked up in a table lifted from chuni-penguin.
+ * Titles ("trophies") come in two flavours.
+ *
+ * Ordinary ones are a rarity plate with the text written over it: the plate is
+ * named in the background filename (`honor_bg_platina.png`) and the text sits
+ * in the DOM, so both halves can be read and redrawn.
+ *
+ * Collaboration ones are a single finished image with the wording already
+ * baked in. Nothing in the DOM says what it reads — so rather than carry a
+ * lookup table of filename to wording, which can only ever cover the titles
+ * somebody has already catalogued, the image itself is handed on and drawn as
+ * the game drew it. Same decision, and for the same reason, as the Linked GATE
+ * hexagons: nothing redrawn here would be more recognisable to a player than
+ * the artwork already on the cabinet.
  */
 function parseTitle($: CheerioAPI, element: Cheerio<Element>): Title | null {
   const url = backgroundImageUrl(element.attr('style'));
@@ -55,12 +64,10 @@ function parseTitle($: CheerioAPI, element: Cheerio<Element>): Title | null {
 
     if (!content) return null;
 
-    return { content, rarity };
+    return { content, rarity, imageUrl: null };
   }
 
-  const special = SPECIAL_TITLES[filename];
-
-  return special ? { content: special.content, rarity: special.rarity } : null;
+  return { content: '', rarity: 'special', imageUrl: url };
 }
 
 function parseSkillClass(
