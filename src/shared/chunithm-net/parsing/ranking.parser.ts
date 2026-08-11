@@ -181,15 +181,16 @@ export function parseLinkedVerse(
 
       result.push({
         gate,
-        // If CHUNITHM-NET serves a badge image, the gate has been cleared/unlocked.
-        status:
-          status ??
-          (source ? LinkedGateStatus.CLEAR : LinkedGateStatus.NOT_FOUND),
-        // The game's own badge art for this gate in this state.
+        // Never fall back to NOT_FOUND. An unrecognised badge is a gap in the
+        // lookup, not a statement about the player's progress — reporting one
+        // as "not found" once told players who had cleared SUN and LUMINOUS
+        // that they had never even found those gates.
+        status: status ?? LinkedGateStatus.UNKNOWN,
+        // The game's own badge art for this gate in this state. Nothing we
+        // could draw would be as recognisable to a player as the hexagon they
+        // already see on the cabinet.
         badgeUrl: source ? source.replace(/([^:])\/\//g, '$1/') : null,
-        ...(status === undefined && filename
-          ? { unrecognisedBadge: filename }
-          : {}),
+        ...(status === undefined ? { unrecognisedBadge: filename } : {}),
       });
     },
   );
