@@ -182,10 +182,14 @@ export function parseLinkedVerse(
       result.push({
         gate,
         // If CHUNITHM-NET serves a badge image, the gate has been cleared/unlocked.
-        status: status ?? (source ? LinkedGateStatus.CLEAR : LinkedGateStatus.NOT_FOUND),
+        status:
+          status ??
+          (source ? LinkedGateStatus.CLEAR : LinkedGateStatus.NOT_FOUND),
         // The game's own badge art for this gate in this state.
         badgeUrl: source ? source.replace(/([^:])\/\//g, '$1/') : null,
-        ...(status === undefined && filename ? { unrecognisedBadge: filename } : {}),
+        ...(status === undefined && filename
+          ? { unrecognisedBadge: filename }
+          : {}),
       });
     },
   );
