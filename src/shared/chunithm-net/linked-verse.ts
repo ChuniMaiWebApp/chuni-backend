@@ -18,22 +18,3 @@ export enum LinkedGate {
   LUMINOUS = 'luminous',
   VERSE = 'verse',
 }
-
-export enum LinkedGateStatus {
-  /** The gate has not appeared for this player yet. */
-  NOT_FOUND = 'not_found',
-  UNDER_ANALYSIS = 'under_analysis',
-  /** Unlocked and ready to be linked. */
-  LINKABLE = 'linkable',
-  CLEAR = 'clear',
-  /**
-   * The badge image is one we have no entry for.
-   *
-   * Reporting this rather than falling back to NOT_FOUND matters: SEGA adds a
-   * gate every version, and treating an unrecognised badge as "not found" told
-   * players who had cleared SUN and LUMINOUS that they had not even found
-   * them. An honest "unknown" is visibly wrong and gets fixed; a plausible
-   * wrong answer does not.
-   */
-  UNKNOWN = 'unknown',
-}

@@ -23,7 +23,6 @@ import {
 } from '../../shared/chunithm-net/chunithm-net.types';
 import { AuthService } from '../auth/auth.service';
 import { SongsService } from '../songs/songs.service';
-import { LinkedGateBadgesRepository } from './linked-gate-badges.repository';
 import { PlayDetailsRepository } from './play-details.repository';
 import { ScoreEnricherService } from './score-enricher.service';
 
@@ -42,7 +41,6 @@ export class ChunithmService {
     private readonly enricher: ScoreEnricherService,
     private readonly songs: SongsService,
     private readonly playDetails: PlayDetailsRepository,
-    private readonly gateBadges: LinkedGateBadgesRepository,
   ) {}
 
   /** Includes the nameplate banner, which costs a second CHUNITHM-NET page. */
@@ -61,31 +59,15 @@ export class ChunithmService {
   /**
    * Progress through the Linked GATEs.
    *
-   * The badge images are opaque filenames, so their meaning comes from
-   * `app.linked_gate_badges`. Anything not in there is reported as UNKNOWN and
-   * written back as an unlabelled row, so the gap is visible and fixable
-   * rather than quietly wrong — SEGA adds a gate every version, and the
-   * alternative is telling a player who cleared it that they never found it.
+   * Each gate comes back as the badge CHUNITHM-NET serves for it, and nothing
+   * else. The artwork already shows the state; deriving a separate status from
+   * the filename needed a hand-kept lookup that only ever managed to disagree
+   * with it.
    */
-  async getLinkedVerse(userId: string) {
-    const known = await this.gateBadges.findKnown();
-
-    const progress = await this.auth.withChunithmSession(userId, (session) =>
-      session.getLinkedVerseProgress(known),
+  getLinkedVerse(userId: string) {
+    return this.auth.withChunithmSession(userId, (session) =>
+      session.getLinkedVerseProgress(),
     );
-
-    const unrecognised = progress
-      .filter((entry) => entry.unrecognisedBadge)
-      .map((entry) => ({
-        filename: entry.unrecognisedBadge as string,
-        gate: entry.gate,
-      }));
-
-    // Recording is best effort: a player looking at their gates should not get
-    // an error because bookkeeping failed.
-    await this.gateBadges.recordUnknown(unrecognised).catch(() => undefined);
-
-    return progress;
   }
 
   /**

@@ -34,7 +34,6 @@ import {
   parseMusicCatalogue,
   type ListedChart,
 } from './parsing/catalogue.parser';
-import type { LinkedGateStatus } from './linked-verse';
 import { chuniInt } from './parsing/utils';
 import {
   parseMusicList,
@@ -606,18 +605,9 @@ export class ChunithmNetSession {
     return parseLoginBonus(await this.request('GET', 'mobile/loginBonus/'));
   }
 
-  /**
-   * @param badges filename-to-status, as far as it has been established. The
-   *   session has no database of its own, so the caller supplies it; anything
-   *   missing comes back as UNKNOWN with the filename attached, which is what
-   *   lets the caller record it for labelling.
-   */
-  async getLinkedVerseProgress(
-    badges: Readonly<Record<string, LinkedGateStatus>> = {},
-  ) {
+  async getLinkedVerseProgress() {
     return parseLinkedVerse(
       await this.request('GET', 'mobile/home/linkedVerse/'),
-      badges,
     );
   }
 

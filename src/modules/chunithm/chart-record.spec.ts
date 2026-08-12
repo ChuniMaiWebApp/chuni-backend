@@ -2,7 +2,6 @@ import { Difficulty } from '../../shared/chunithm-net/chunithm-net.types';
 import type { AuthService } from '../auth/auth.service';
 import type { SongsService } from '../songs/songs.service';
 import { ChunithmService } from './chunithm.service';
-import type { LinkedGateBadgesRepository } from './linked-gate-badges.repository';
 import type { PlayDetailsRepository } from './play-details.repository';
 import type { ScoreEnricherService } from './score-enricher.service';
 
@@ -99,12 +98,6 @@ const build = (options: {
         }),
     } as unknown as SongsService,
     { save, findBestForChart } as unknown as PlayDetailsRepository,
-    // Not exercised here: these tests are about resolving a chart record, and
-    // the gate badge lookup only takes part in the Linked VERSE path.
-    {
-      findKnown: () => Promise.resolve({}),
-      recordUnknown: () => Promise.resolve(),
-    } as unknown as LinkedGateBadgesRepository,
   );
 
   return { service, save, findBestForChart };

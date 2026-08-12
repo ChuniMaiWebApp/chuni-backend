@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { LinkedGate, LinkedGateStatus } from '../linked-verse';
+import { LinkedGate } from '../linked-verse';
 import { parseLoginBonus } from './login-bonus.parser';
 import { parseLeaderboard, parseLinkedVerse } from './ranking.parser';
 
@@ -46,12 +46,11 @@ describe('parseLeaderboard', () => {
 describe('parseLinkedVerse', () => {
   const gates = parseLinkedVerse(fixture('linked_verse.html'));
 
-  it('reads a status for every gate on the page', () => {
+  it('reads every gate on the page', () => {
     expect(gates.length).toBeGreaterThan(0);
 
     for (const entry of gates) {
       expect(Object.values(LinkedGate)).toContain(entry.gate);
-      expect(Object.values(LinkedGateStatus)).toContain(entry.status);
     }
   });
 
@@ -63,55 +62,37 @@ describe('parseLinkedVerse', () => {
     });
   });
 
-  /**
-   * Regression: SEGA adds a gate every version and the inherited badge table
-   * stops at NEW. Falling back to NOT_FOUND told a player who had cleared SUN
-   * and LUMINOUS that they had never even found those gates, silently, for
-   * months.
-   */
-  it('reports an unrecognised badge as unknown, never as not found', () => {
-    const html = `
-      <div class="linked_verse_icon_status_block">
-        <div class="linked_verse_icon_block">
-          <img src="https://example.invalid/img/NOTAREALBADGEHASH0000000000000000.png">
-        </div>
-      </div>`;
-
-    const [entry] = parseLinkedVerse(html);
-
-    expect(entry.status).toBe(LinkedGateStatus.UNKNOWN);
-    // Surfaced so it can be added to the table rather than guessed at.
-    expect(entry.unrecognisedBadge).toBe('NOTAREALBADGEHASH0000000000000000');
-  });
-
-  it('uses the lookup it is given', () => {
-    // What a badge means lives in app.linked_gate_badges, so that a gate SEGA
-    // added this version can be labelled without a deploy. The parser only
-    // applies whatever it is handed.
+  it('hands back the badge the game serves, without interpreting it', () => {
+    // The whole result for a gate. Deriving a status from the filename needed
+    // a hand-kept lookup, and every version of that lookup ended up
+    // contradicting the artwork it sat beside.
     const html = `
       <div class="linked_verse_icon_status_block">
         <div class="linked_verse_icon_block">
           <img src="https://example.invalid/img/0W4PTHG72IIN3OIG0GBR3SF8OPB87CPN.png">
         </div>
+      </div>`;
+
+    expect(parseLinkedVerse(html)).toEqual([
+      {
+        gate: Object.values(LinkedGate)[0],
+        badgeUrl:
+          'https://example.invalid/img/0W4PTHG72IIN3OIG0GBR3SF8OPB87CPN.png',
+      },
+    ]);
+  });
+
+  it('collapses the doubled slash the page emits after the host', () => {
+    const html = `
+      <div class="linked_verse_icon_status_block">
         <div class="linked_verse_icon_block">
-          <img src="https://example.invalid/img/7Q0L2EVXCT9VNA4XNS3D8ELZ61QO21AV.png">
+          <img src="https://example.invalid/mobile//images/ABC.png">
         </div>
       </div>`;
 
-    const badges = {
-      '0W4PTHG72IIN3OIG0GBR3SF8OPB87CPN': LinkedGateStatus.CLEAR,
-      '7Q0L2EVXCT9VNA4XNS3D8ELZ61QO21AV': LinkedGateStatus.CLEAR,
-    };
-
-    expect(parseLinkedVerse(html, badges).map((entry) => entry.status)).toEqual(
-      [LinkedGateStatus.CLEAR, LinkedGateStatus.CLEAR],
+    expect(parseLinkedVerse(html)[0].badgeUrl).toBe(
+      'https://example.invalid/mobile/images/ABC.png',
     );
-
-    // Without it, the same page is honestly unknown rather than wrong.
-    expect(parseLinkedVerse(html).map((entry) => entry.status)).toEqual([
-      LinkedGateStatus.UNKNOWN,
-      LinkedGateStatus.UNKNOWN,
-    ]);
   });
 });
 

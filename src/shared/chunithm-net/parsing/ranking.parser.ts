@@ -1,6 +1,6 @@
 import { load } from 'cheerio';
 
-import { LinkedGate, LinkedGateStatus } from '../linked-verse';
+import { LinkedGate } from '../linked-verse';
 import { chuniInt, extractLastPart, parseChunithmDate } from './utils';
 
 export interface LeaderboardEntry {
@@ -138,59 +138,41 @@ export function readRatingFromImages(_text: string, images: string[]): number {
 
 export interface LinkedGateProgress {
   gate: LinkedGate;
-  status: LinkedGateStatus;
+
   /**
-   * The game's own badge art for this gate in this state.
+   * The game's own badge art for this gate, in whatever state it is in.
    *
-   * Nothing drawn here would be as recognisable to a player as the hexagon
-   * already on the cabinet, so the page shows SEGA's image rather than an
-   * interpretation of it.
+   * The only thing reported about a gate, and deliberately so. The hexagon
+   * arrives already drawn for that state; there is nothing in the markup that
+   * says which state it is, so anything more would have to come from a
+   * hand-kept lookup of filename to meaning. There was one, and both times a
+   * status was rendered from it the status disagreed with the picture beside
+   * it — first calling every gate cleared, then calling cleared gates
+   * uncleared. The picture was right on both occasions.
    */
   badgeUrl: string | null;
-  /** Set only when the badge image is not in any lookup table. */
-  unrecognisedBadge?: string;
 }
 
 /** Parses `GET /mobile/home/linkedVerse/` — progress through the Linked GATEs. */
-export function parseLinkedVerse(
-  html: string,
-  /**
-   * Filename to status, as far as anyone has established it.
-   *
-   * Passed in rather than imported: what a badge means is knowledge that
-   * accumulates, and it lives in `app.linked_gate_badges` so it can be added
-   * to without a deploy. A parser that reached for it itself would have to
-   * reach into the database, which is not this layer's business.
-   */
-  badges: Readonly<Record<string, LinkedGateStatus>> = {},
-): LinkedGateProgress[] {
+export function parseLinkedVerse(html: string): LinkedGateProgress[] {
   const $ = load(html);
   const gates = Object.values(LinkedGate);
   const result: LinkedGateProgress[] = [];
 
   $('.linked_verse_icon_status_block .linked_verse_icon_block img').each(
     (index, element) => {
+      // Which gate this is comes from its position: the page renders them in
+      // release order and names none of them.
       const gate = gates[index];
 
       if (gate === undefined) return;
 
       const source = $(element).attr('src');
-      const filename = source?.split('/').pop()?.split('.')[0] ?? '';
-
-      const status = badges[filename];
 
       result.push({
         gate,
-        // Never fall back to NOT_FOUND. An unrecognised badge is a gap in the
-        // lookup, not a statement about the player's progress — reporting one
-        // as "not found" once told players who had cleared SUN and LUMINOUS
-        // that they had never even found those gates.
-        status: status ?? LinkedGateStatus.UNKNOWN,
-        // The game's own badge art for this gate in this state. Nothing we
-        // could draw would be as recognisable to a player as the hexagon they
-        // already see on the cabinet.
+        // The page builds these with a doubled slash after the host.
         badgeUrl: source ? source.replace(/([^:])\/\//g, '$1/') : null,
-        ...(status === undefined ? { unrecognisedBadge: filename } : {}),
       });
     },
   );
